@@ -2,22 +2,21 @@
 repeat {
 
   # # say Hello to Gmail
-  # n_errors <- tryCatch(
-  #   {
-  #     gm_auth_configure(path = config$email_auth_path)
-  #     gm_auth(cache = ".secret", email = config$email_from)
-  #     0L
-  #   },
-  #   error = function(e1) {
-  #     flog.error(sprintf("Accessing Gmail failed - can't report results. Msg = %s", conditionMessage(e1)),
-  #                name = "cz_df")
-  #     return(1L)
-  #   }
-  # )
-  #
-  # if (n_errors > 0) {
-  #   break
-  # }
+  n_errors <- tryCatch(
+    {
+      gm_auth(token = gm_token_read(path = ".secrets/gmailr-token.rds"))
+      0L
+    },
+    error = function(e1) {
+      flog.error(sprintf("Accessing Gmail failed - can't report results. Msg = %s", conditionMessage(e1)),
+                 name = "cz_df")
+      return(1L)
+    }
+  )
+
+  if (n_errors > 0) {
+    break
+  }
 
   if (exists("salsa_source_error")) {
     report_msg <- "Taak kon niet voltooid worden - zie 'woj_schedules.log' (Nipper/Desktop)."
