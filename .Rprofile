@@ -7,9 +7,9 @@ get_git_branch <- function() {
 set_config <- function() {
 
   if (get_git_branch() == "main") {
-    source("src/config_prd.R")
+    source("R/config_prd.R")
   } else {
-    source("src/config_dev.R")
+    source("R/config_dev.R")
   }
 }
 
