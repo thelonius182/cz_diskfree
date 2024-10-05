@@ -5,7 +5,7 @@ pacman::p_load(googledrive, googlesheets4, dplyr, tidyr, lubridate, fs, uuid, RP
 
 conflicts_prefer(dplyr::lag, dplyr::lead, dplyr::filter, lubridate::minutes, .quiet = T)
 
-source("src/functions.R", encoding = "UTF-8")
+source("R/functions.R", encoding = "UTF-8")
 config <- read_yaml("config_dev.yaml")
 
 woj_gids_creds_dev <- read_rds(config$db_dev_creds)
