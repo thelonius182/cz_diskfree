@@ -19,7 +19,7 @@ repeat {
   }
 
   if (exists("salsa_source_error")) {
-    report_msg <- "Taak kon niet voltooid worden - zie 'woj_schedules.log' (Nipper/Desktop)."
+    report_msg <- "Taak kon niet voltooid worden - zie 'woj_schedules.log' (Nipper >> Desktop)."
   } else {
     report_msg <- "Taak voltooid, geen bijzonderheden."
   }
