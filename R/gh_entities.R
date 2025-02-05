@@ -1,7 +1,9 @@
+source("R/config_prd.R")
 wpdb <- get_wp_conn()
 typeof(wpdb)
 
-sql_stm <- "select * from wp_posts where post_type regexp 'programma' and post_date > '2024-01-01';"
+# sql_stm <- "select * from wp_posts where post_type regexp 'programma' and post_date > '2025-01-01';"
+sql_stm <- "select * from wp_posts where post_type regexp 'programma';"
 wp_posts <- dbGetQuery(wpdb, sql_stm)
 swf_posts <- wp_posts |> mutate(bc_post_id = ID,
                                 bc_start = ymd_hms(post_date, tz = "Europe/Amsterdam"),
@@ -33,11 +35,11 @@ join wp_terms t1 on t1.term_id = x1.term_id
 join wp_posts p1 on p1.ID = r1.object_id
 where x1.taxonomy = 'post_translations'
 and post_type regexp '^programma'
-and post_date > '2024-01-01'
+-- and post_date > '2025-01-01'
 order by 1;"
 wp_translations <- dbGetQuery(wpdb, sql_stm)
 
-swf_translation <- wp_translations |>
+swf_translations <- wp_translations |>
   mutate(post_id_nl = str_extract(post_translations,
                                   pattern = '"nl";i:(\\d{6,});',
                                   group = 1) |> as.integer(),
@@ -53,7 +55,7 @@ join wp_terms t1 on t1.term_id = x1.term_id
 join wp_posts p1 on p1.ID = r1.object_id
 where x1.taxonomy = 'language'
 and post_type regexp '^programma'
-and post_date > '2024-01-01'
+and post_date > '2025-01-01'
 order by 1;"
 wp_language <- dbGetQuery(wpdb, sql_stm)
 
@@ -65,7 +67,7 @@ from wp_term_relationships r1
 where x1.taxonomy = 'programma_genre'
   and t1.slug regexp '__.*-(nl|en)$'
   and post_type regexp '^programma'
-  and post_date > '2024-01-01'
+  and post_date > '2025-01-01'
 order by 1;
 "
 wp_genre <- dbGetQuery(wpdb, sql_stm)
@@ -93,7 +95,7 @@ from wp_term_relationships r1
      join wp_posts p1 on p1.ID = r1.object_id
 where x1.taxonomy = 'programma_maker'
   and post_type regexp '^programma'
-  and post_date > '2024-01-01'
+  and post_date > '2025-01-01'
 order by 1;
 "
 wp_editor <- dbGetQuery(wpdb, sql_stm)
@@ -102,3 +104,21 @@ swf_editor <- wp_editor |> anti_join(wrk_editor_err, by = join_by(post_id)) |>
   mutate(editor_id = term_id,
          editor_slug = str_extract(editor, "(.*)-(nl|en)$", group = 1),
          lang = str_extract(editor, ".*-(..)$", group = 1))
+
+swf_replays_2 <- swf_replays |> left_join(swf_posts, by = join_by(bc_replay_of == bc_post_id))
+
+swf_view1 <- swf_posts |> filter(bc_start > "2025-02-05" & bc_platform == "CZ") |>
+  inner_join(wp_language, by = join_by(bc_post_id == post_id)) |> filter(lang == "nl") |>
+  left_join(swf_replays_2, by = join_by(bc_post_id)) |>
+  rename(bc_start = bc_start.x,
+         bc_start_replay_of = bc_start.y,
+         bc_title = bc_title.x,
+         bc_title_replay_of = bc_title.y) |>
+  select(-bc_published.x, -bc_published.y, -bc_platform.x, -bc_platform.y, -lang)
+
+pgms_A <- c("Sonoor", "In de Schijnwerper", "Noorderlicht", "Het Strijkkwartet", "Sanssouci",
+            "De eigenzinnige Prokofjev", "Onbekend is Onbemind?")
+swf_view2 <- swf_view1 |> filter(bc_title %in% pgms_A | bc_title_replay_of %in% pgms_A) |> arrange(bc_start) |>
+  mutate(bc_start = format(bc_start, "%Y-%m-%d_%a%Hu"),
+         bc_start_replay_of = format(bc_start_replay_of, "%Y-%m-%d_%a%Hu"))
+write_tsv(swf_view2, "g:/salsa/cz_gids_pgms_A_IST.tsv", append = F, na = "")
