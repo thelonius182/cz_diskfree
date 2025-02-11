@@ -2,8 +2,31 @@ source("R/config_prd.R")
 wpdb <- get_wp_conn()
 typeof(wpdb)
 
-# sql_stm <- "select * from wp_posts where post_type regexp 'programma' and post_date > '2025-01-01';"
-sql_stm <- "select * from wp_posts where post_type regexp 'programma';"
+# Reduce all chained repeats
+qry <- "drop table if exists salsa_replacements;"
+valF.1 <- dbExecute(wpdb, qry)
+
+qry <- "create table salsa_replacements as SELECT
+         pm1.post_id as pgmID1,
+         pm1.meta_value as replaceID1,
+         pm2.post_id as pgmID2,
+         pm2.meta_value as replaceID2
+         FROM wp_postmeta pm1
+         JOIN wp_postmeta pm2 ON CAST(pm1.meta_value AS UNSIGNED) = pm2.post_id
+         WHERE pm1.meta_key = 'pr_metadata_orig'
+           AND pm2.meta_key = 'pr_metadata_orig'
+           AND LENGTH(TRIM(pm1.meta_value)) > 0
+           AND LENGTH(TRIM(pm2.meta_value)) > 0
+         order by 4
+         ;"
+valF.2 <- dbExecute(wpdb, qry)
+
+qry <- "update wp_postmeta pm1 join salsa_replacements rp1 on rp1.pgmID1 = pm1.post_id
+         set pm1.meta_value = rp1.replaceID2 where pm1.meta_key = 'pr_metadata_orig'
+         ;"
+valF.3 <- dbExecute(wpdb, qry)
+
+sql_stm <- "select * from wp_posts where post_type regexp 'programma' and post_status = 'publish';"
 wp_posts <- dbGetQuery(wpdb, sql_stm)
 swf_posts <- wp_posts |> mutate(bc_post_id = ID,
                                 bc_start = ymd_hms(post_date, tz = "Europe/Amsterdam"),
@@ -67,7 +90,7 @@ from wp_term_relationships r1
 where x1.taxonomy = 'programma_genre'
   and t1.slug regexp '__.*-(nl|en)$'
   and post_type regexp '^programma'
-  and post_date > '2025-01-01'
+  -- and post_date > '2025-01-01'
 order by 1;
 "
 wp_genre <- dbGetQuery(wpdb, sql_stm)
@@ -107,18 +130,37 @@ swf_editor <- wp_editor |> anti_join(wrk_editor_err, by = join_by(post_id)) |>
 
 swf_replays_2 <- swf_replays |> left_join(swf_posts, by = join_by(bc_replay_of == bc_post_id))
 
-swf_view1 <- swf_posts |> filter(bc_start > "2025-02-05" & bc_platform == "CZ") |>
+swf_view1 <- swf_posts |> filter(bc_start > "2025-02-01" & bc_platform == "CZ") |>
   inner_join(wp_language, by = join_by(bc_post_id == post_id)) |> filter(lang == "nl") |>
   left_join(swf_replays_2, by = join_by(bc_post_id)) |>
   rename(bc_start = bc_start.x,
          bc_start_replay_of = bc_start.y,
          bc_title = bc_title.x,
          bc_title_replay_of = bc_title.y) |>
-  select(-bc_published.x, -bc_published.y, -bc_platform.x, -bc_platform.y, -lang)
+  select(-bc_published.x, -bc_published.y, -bc_platform.x, -bc_platform.y, -lang) |>
+  mutate(bc_post_id_final = if_else(is.na(bc_replay_of), bc_post_id, bc_replay_of)) |>
+  left_join(swf_title, by = join_by(bc_post_id_final == post_id))
 
-pgms_A <- c("Sonoor", "In de Schijnwerper", "Noorderlicht", "Het Strijkkwartet", "Sanssouci",
-            "De eigenzinnige Prokofjev", "Onbekend is Onbemind?")
-swf_view2 <- swf_view1 |> filter(bc_title %in% pgms_A | bc_title_replay_of %in% pgms_A) |> arrange(bc_start) |>
-  mutate(bc_start = format(bc_start, "%Y-%m-%d_%a%Hu"),
-         bc_start_replay_of = format(bc_start_replay_of, "%Y-%m-%d_%a%Hu"))
-write_tsv(swf_view2, "g:/salsa/cz_gids_pgms_A_IST.tsv", append = F, na = "")
+# pgms_A <- c("Sonoor", "In de Schijnwerper", "Noorderlicht", "Het Strijkkwartet", "Sanssouci",
+#             "De eigenzinnige Prokofjev", "Onbekend is Onbemind?")
+# pgms_B <- c("concertzender-live")
+# swf_view2 <- swf_view1 |> filter(title_slug %in% pgms_B) |> arrange(bc_start) |>
+#   mutate(bc_start = format(bc_start, "%Y-%m-%d_%a%Hu"),
+#          bc_start_replay_of = format(bc_start_replay_of, "%Y-%m-%d_%a%Hu")) |>
+#   select(bc_post_id, bc_start, title_slug, genre_slug, bc_replay_of, bc_start_replay_of)
+dutch_weekdays <- c("zo", "ma", "di", "wo", "do", "vr", "za")
+
+bc_ts_fmt <- function(a_date) {
+  paste0(format(a_date, "%Y-%m-%d_"),
+         dutch_weekdays[as.integer(format(a_date, "%w")) + 1],
+         format(a_date, "%H"),
+         "u")
+}
+
+swf_view2 <- swf_view1 |>
+  mutate(bc_start = bc_ts_fmt(bc_start),
+         bc_start_replay_of = if_else(is.na(bc_start_replay_of), "", bc_ts_fmt(bc_start_replay_of)))
+
+write_tsv(swf_view2, "g:/salsa/cz_gids_pgms_all.tsv", append = F, na = "")
+
+sql_result <- dbDisconnect(wpdb)
